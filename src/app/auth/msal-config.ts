@@ -28,7 +28,7 @@ export function MSALInstanceFactory(): IPublicClientApplication {
 
 export function MSALGuardConfigFactory(): MsalGuardConfiguration {
   return {
-    interactionType: InteractionType.Popup,
+    interactionType: InteractionType.Redirect,
     authRequest: {
       scopes: environment.azure.scopes
     },
@@ -43,7 +43,7 @@ export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
   protectedResourceMap.set('http://localhost:8080/api', environment.azure.scopes);
 
   return {
-    interactionType: InteractionType.Popup,
+    interactionType: InteractionType.Redirect,
     protectedResourceMap
   };
 }

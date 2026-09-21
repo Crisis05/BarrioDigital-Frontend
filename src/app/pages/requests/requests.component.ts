@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
@@ -36,7 +36,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
       <!-- Alertas informativas -->
       <div *ngIf="alertMessage" class="alert alert-dismissible fade show" [ngClass]="alertClass" role="alert">
         <i class="bi me-2" [ngClass]="alertIcon"></i>{{ alertMessage }}
-        <button type="button" class="btn-close" (click)="alertMessage = ''"></button>
+        <button type="button" class="btn-close" (click)="closeAlert()"></button>
       </div>
 
       <!-- Barra de Filtros -->
@@ -157,7 +157,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
               <h5 class="modal-title fw-bold">
                 <i class="bi bi-pencil-square me-2"></i>Ingresar Solicitud Comunal
               </h5>
-              <button type="button" class="btn-close btn-close-white" (click)="showCreateModal = false"></button>
+              <button type="button" class="btn-close btn-close-white" (click)="closeCreateModal()"></button>
             </div>
             <div class="modal-body p-4">
               <form (ngSubmit)="submitCreateRequest()">
@@ -173,7 +173,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
                   </div>
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">RUT / DNI del Vecino *</label>
-                    <input type="text" class="form-control" [(ngModel)]="newRequest.citizenDni" name="citizenDni" placeholder="Ej: 18.234.567-8" required />
+                    <input type="text" class="form-control" [(ngModel)]="newRequest.citizenDni" name="citizenDni" placeholder="Ej: 18.234.567-8" maxlength="20" required />
                   </div>
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">Nombre Completo *</label>
@@ -198,7 +198,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
                 </div>
 
                 <div class="mt-4 text-end">
-                  <button type="button" class="btn btn-secondary me-2" (click)="showCreateModal = false">Cancelar</button>
+                  <button type="button" class="btn btn-secondary me-2" (click)="closeCreateModal()">Cancelar</button>
                   <button type="submit" class="btn btn-primary px-4" [disabled]="!isCreateFormValid()">
                     <i class="bi bi-send me-1"></i> Enviar Trámite
                   </button>
@@ -217,7 +217,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
               <h5 class="modal-title fw-bold">
                 <i class="bi bi-arrow-repeat me-2"></i>Cambio de Estado - {{ selectedRequest.trackingNumber }}
               </h5>
-              <button type="button" class="btn-close btn-close-white" (click)="showStatusModal = false"></button>
+              <button type="button" class="btn-close btn-close-white" (click)="closeStatusModal()"></button>
             </div>
             <div class="modal-body p-4">
               <div class="mb-3">
@@ -271,7 +271,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
               </div>
 
               <div class="mt-4 text-end">
-                <button type="button" class="btn btn-secondary me-2" (click)="showStatusModal = false">Cancelar</button>
+                <button type="button" class="btn btn-secondary me-2" (click)="closeStatusModal()">Cancelar</button>
                 <button
                   type="button"
                   class="btn btn-primary px-4"
@@ -294,7 +294,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
               <h5 class="modal-title fw-bold">
                 <i class="bi bi-clock-history me-2"></i>Trazabilidad del Trámite: {{ selectedRequest.trackingNumber }}
               </h5>
-              <button type="button" class="btn-close btn-close-white" (click)="showTimelineModal = false"></button>
+              <button type="button" class="btn-close btn-close-white" (click)="closeTimelineModal()"></button>
             </div>
             <div class="modal-body p-4">
               <div *ngIf="timelineLogs.length === 0" class="text-center py-4 text-muted">
@@ -318,7 +318,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
               </div>
 
               <div class="text-end mt-3">
-                <button type="button" class="btn btn-secondary" (click)="showTimelineModal = false">Cerrar</button>
+                <button type="button" class="btn btn-secondary" (click)="closeTimelineModal()">Cerrar</button>
               </div>
             </div>
           </div>
@@ -330,6 +330,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
 export class RequestsComponent implements OnInit {
   private apiService = inject(ApiService);
   private authService = inject(AuthService);
+  private cdr = inject(ChangeDetectorRef);
 
   currentUser: UserProfile | null = null;
   requests: RequestItem[] = [];
@@ -379,15 +380,25 @@ export class RequestsComponent implements OnInit {
       next: (data) => {
         this.requests = data;
         this.applyFilters();
+        this.cdr.detectChanges();
       },
-      error: (err) => this.showAlert('Error al cargar trámites desde el backend.', 'alert-danger')
+      error: (err) => {
+        this.showAlert('Error al cargar trámites desde el backend.', 'alert-danger');
+        this.cdr.detectChanges();
+      }
     });
   }
 
   loadProcedures(): void {
     this.apiService.getProcedures().subscribe({
-      next: (data) => (this.procedures = data),
-      error: (err) => console.error('Error cargando catálogo:', err)
+      next: (data) => {
+        this.procedures = data;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Error cargando catálogo:', err);
+        this.cdr.detectChanges();
+      }
     });
   }
 
@@ -410,12 +421,14 @@ export class RequestsComponent implements OnInit {
     }
 
     this.filteredRequests = result;
+    this.cdr.detectChanges();
   }
 
   resetFilters(): void {
     this.filterStatus = '';
     this.searchQuery = '';
     this.filteredRequests = [...this.requests];
+    this.cdr.detectChanges();
   }
 
   canCreateRequest(): boolean {
@@ -439,6 +452,7 @@ export class RequestsComponent implements OnInit {
       description: ''
     };
     this.showCreateModal = true;
+    this.cdr.detectChanges();
   }
 
   onProcedureChange(): void {
@@ -484,6 +498,7 @@ export class RequestsComponent implements OnInit {
     this.resolutionNotes = req.resolutionNotes || '';
     this.statusComment = '';
     this.showStatusModal = true;
+    this.cdr.detectChanges();
   }
 
   submitStatusUpdate(): void {
@@ -517,11 +532,18 @@ export class RequestsComponent implements OnInit {
     this.selectedRequest = req;
     this.timelineLogs = [];
     this.showTimelineModal = true;
+    this.cdr.detectChanges();
 
     if (req.id) {
       this.apiService.getRequestTimeline(req.id).subscribe({
-        next: (logs) => (this.timelineLogs = logs),
-        error: (err) => console.error('Error cargando timeline:', err)
+        next: (logs) => {
+          this.timelineLogs = logs;
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          console.error('Error cargando timeline:', err);
+          this.cdr.detectChanges();
+        }
       });
     }
   }
@@ -530,6 +552,30 @@ export class RequestsComponent implements OnInit {
     this.alertMessage = message;
     this.alertClass = cssClass;
     this.alertIcon = cssClass.includes('success') ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill';
+    this.cdr.detectChanges();
+  }
+
+  closeAlert(): void {
+    this.alertMessage = '';
+    this.cdr.detectChanges();
+  }
+
+  closeCreateModal(): void {
+    this.showCreateModal = false;
+    this.cdr.detectChanges();
+  }
+
+  closeStatusModal(): void {
+    this.showStatusModal = false;
+    this.selectedRequest = null;
+    this.cdr.detectChanges();
+  }
+
+  closeTimelineModal(): void {
+    this.showTimelineModal = false;
+    this.selectedRequest = null;
+    this.timelineLogs = [];
+    this.cdr.detectChanges();
   }
 
   getStatusBadge(status: string): string {

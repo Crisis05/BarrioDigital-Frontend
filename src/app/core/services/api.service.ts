@@ -63,6 +63,11 @@ export class ApiService {
     return this.http.put<ProcedureType>(`${this.baseUrl}/catalog/procedures/${id}`, procedure);
   }
 
+  deleteProcedure(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/catalog/procedures/${id}`);
+  }
+
+
   // Reportería y KPIs
   getKpis(range: string = 'last24h'): Observable<KpisResponse> {
     return this.http.get<KpisResponse>(`${this.baseUrl}/report/kpis`, { params: { range } });

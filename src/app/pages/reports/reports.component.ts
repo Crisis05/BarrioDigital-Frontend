@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../../core/services/api.service';
 import { KpisResponse } from '../../core/models/request.model';
@@ -127,18 +127,25 @@ import { KpisResponse } from '../../core/models/request.model';
 })
 export class ReportsComponent implements OnInit {
   private apiService = inject(ApiService);
+  private cdr = inject(ChangeDetectorRef);
 
   kpis: KpisResponse | null = null;
   topProcedures: any[] = [];
 
   ngOnInit(): void {
     this.apiService.getKpis().subscribe({
-      next: (data) => (this.kpis = data),
+      next: (data) => {
+        this.kpis = data;
+        this.cdr.detectChanges();
+      },
       error: (err) => console.error('Error cargando KPIs:', err)
     });
 
     this.apiService.getTopProcedures().subscribe({
-      next: (data) => (this.topProcedures = data.topProcedures || []),
+      next: (data) => {
+        this.topProcedures = data.topProcedures || [];
+        this.cdr.detectChanges();
+      },
       error: (err) => console.error('Error cargando Top Procedures:', err)
     });
   }

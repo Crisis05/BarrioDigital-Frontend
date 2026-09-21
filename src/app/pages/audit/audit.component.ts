@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
@@ -115,6 +115,7 @@ import { AuditLog } from '../../core/models/request.model';
 })
 export class AuditComponent implements OnInit {
   private apiService = inject(ApiService);
+  private cdr = inject(ChangeDetectorRef);
 
   logs: AuditLog[] = [];
   filteredLogs: AuditLog[] = [];
@@ -131,8 +132,12 @@ export class AuditComponent implements OnInit {
       next: (data) => {
         this.logs = data;
         this.applyFilters();
+        this.cdr.detectChanges();
       },
-      error: (err) => console.error('Error cargando registros de auditoría:', err)
+      error: (err) => {
+        console.error('Error cargando registros de auditoría:', err);
+        this.cdr.detectChanges();
+      }
     });
   }
 
@@ -154,12 +159,14 @@ export class AuditComponent implements OnInit {
     }
 
     this.filteredLogs = result;
+    this.cdr.detectChanges();
   }
 
   resetFilters(): void {
     this.searchQuery = '';
     this.filterAction = '';
     this.filteredLogs = [...this.logs];
+    this.cdr.detectChanges();
   }
 
   getRoleBadgeClass(role: string): string {

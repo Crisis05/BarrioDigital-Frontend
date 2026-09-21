@@ -1,9 +1,9 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthService, UserProfile } from '../../auth/auth.service';
 import { ApiService } from '../../core/services/api.service';
-import { RequestItem, KpisResponse } from '../../core/models/request.model';
+import { RequestItem, KpisResponse, AuditLog } from '../../core/models/request.model';
 import { ProcedureType } from '../../core/models/procedure.model';
 
 @Component({
@@ -29,6 +29,9 @@ import { ProcedureType } from '../../core/models/procedure.model';
           <a *ngIf="currentUser.role === 'Admin'" routerLink="/reports" class="btn btn-outline-secondary">
             <i class="bi bi-bar-chart me-1"></i> Ver Métricas
           </a>
+          <a *ngIf="currentUser.role === 'Auditor'" routerLink="/audit" class="btn btn-warning text-dark fw-semibold">
+            <i class="bi bi-shield-check me-1"></i> Ver Auditoría
+          </a>
         </div>
       </div>
 
@@ -37,112 +40,205 @@ import { ProcedureType } from '../../core/models/procedure.model';
         <div class="col-sm-6 col-lg-3">
           <div class="card shadow-sm border-0 border-start border-primary border-4 p-3 bg-white">
             <div class="text-muted small fw-semibold">TRÁMITES TOTALES</div>
-            <div class="fs-3 fw-bold text-dark">{{ kpis?.totalRequests || requests.length }}</div>
-            <div class="text-success small"><i class="bi bi-arrow-up-right me-1"></i>En red comunal</div>
+            <div class="fs-3 fw-bold text-dark">{{ requests.length }}</div>
+            <div class="text-primary small"><i class="bi bi-buildings me-1"></i>Red comunal</div>
           </div>
         </div>
 
         <div class="col-sm-6 col-lg-3">
           <div class="card shadow-sm border-0 border-start border-warning border-4 p-3 bg-white">
+            <div class="text-muted small fw-semibold">PENDIENTES ADMISIÓN</div>
+            <div class="fs-3 fw-bold text-warning">{{ admissionQueue.length }}</div>
+            <div class="text-muted small">Por admitir</div>
+          </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+          <div class="card shadow-sm border-0 border-start border-info border-4 p-3 bg-white">
             <div class="text-muted small fw-semibold">EN GESTIÓN / TERRENO</div>
-            <div class="fs-3 fw-bold text-warning">{{ kpis?.activeRequests || countActive() }}</div>
-            <div class="text-muted small">Atención en curso</div>
+            <div class="fs-3 fw-bold text-info">{{ terrainQueue.length }}</div>
+            <div class="text-muted small">Cuadrillas operativas</div>
           </div>
         </div>
 
         <div class="col-sm-6 col-lg-3">
           <div class="card shadow-sm border-0 border-start border-success border-4 p-3 bg-white">
             <div class="text-muted small fw-semibold">RESUELTOS</div>
-            <div class="fs-3 fw-bold text-success">{{ kpis?.resolvedRequests || countResolved() }}</div>
+            <div class="fs-3 fw-bold text-success">{{ resolvedQueue.length }}</div>
             <div class="text-success small"><i class="bi bi-check-circle me-1"></i>Completados</div>
-          </div>
-        </div>
-
-        <div class="col-sm-6 col-lg-3">
-          <div class="card shadow-sm border-0 border-start border-info border-4 p-3 bg-white">
-            <div class="text-muted small fw-semibold">TIEMPO PROMEDIO</div>
-            <div class="fs-3 fw-bold text-info">{{ kpis?.avgResolutionHours || 18.5 }}h</div>
-            <div class="text-muted small">Resolución vecinal</div>
           </div>
         </div>
       </div>
 
       <!-- VISTA CONTEXTUAL SEGÚN EL ROL -->
 
-      <!-- 1. VISTA FUNCIONARIO: Cola de Admisión y En Terreno -->
-      <div *ngIf="currentUser.role === 'Funcionario'" class="row g-4 mb-4">
-        <div class="col-lg-6">
-          <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
-              <span><i class="bi bi-hourglass-split text-warning me-2"></i>Cola de Admisión (Nuevas Solicitudes)</span>
-              <span class="badge bg-warning text-dark">{{ admissionQueue.length }} pendientes</span>
+      <!-- 1. VISTA FUNCIONARIO / ADMIN / AUDITOR: Bandeja de Admisión, Cuadrillas y Trámites Resueltos -->
+      <div *ngIf="currentUser.role === 'Funcionario' || currentUser.role === 'Admin' || currentUser.role === 'Auditor'" class="mb-4">
+        <div class="row g-4 mb-4">
+          <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-hourglass-split text-warning me-2"></i>Bandeja de Admisión (Pendientes)</span>
+                <span class="badge bg-warning text-dark">{{ admissionQueue.length }} nuevos</span>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small">
+                      <tr>
+                        <th>Código</th>
+                        <th>Trámite</th>
+                        <th>Vecino</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let req of admissionQueue">
+                        <td class="fw-bold text-primary">{{ req.trackingNumber }}</td>
+                        <td>{{ req.procedureName }}</td>
+                        <td>{{ req.citizenName }}</td>
+                        <td>
+                          <a [routerLink]="['/requests']" class="btn btn-sm" [ngClass]="currentUser.role === 'Auditor' ? 'btn-outline-secondary' : 'btn-outline-primary'">
+                            <i class="bi" [ngClass]="currentUser.role === 'Auditor' ? 'bi-eye me-1' : 'bi-arrow-right-short me-1'"></i>
+                            {{ currentUser.role === 'Auditor' ? 'Inspeccionar' : 'Gestionar' }}
+                          </a>
+                        </td>
+                      </tr>
+                      <tr *ngIf="admissionQueue.length === 0">
+                        <td colspan="4" class="text-center text-muted py-3">
+                          No hay solicitudes pendientes de admisión en este momento.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                  <thead class="table-light small">
-                    <tr>
-                      <th>Código</th>
-                      <th>Trámite</th>
-                      <th>Vecino</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr *ngFor="let req of admissionQueue">
-                      <td class="fw-bold text-primary">{{ req.trackingNumber }}</td>
-                      <td>{{ req.procedureName }}</td>
-                      <td>{{ req.citizenName }}</td>
-                      <td>
-                        <a [routerLink]="['/requests']" class="btn btn-sm btn-outline-primary">
-                          Revisar
-                        </a>
-                      </td>
-                    </tr>
-                    <tr *ngIf="admissionQueue.length === 0">
-                      <td colspan="4" class="text-center text-muted py-3">
-                        No hay solicitudes pendientes de admisión en este momento.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+          </div>
+
+          <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-truck text-primary me-2"></i>Cuadrillas en Terreno Activas</span>
+                <span class="badge bg-primary">{{ terrainQueue.length }} en ruta</span>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small">
+                      <tr>
+                        <th>Código</th>
+                        <th>Cuadrilla</th>
+                        <th>Dirección</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let req of terrainQueue">
+                        <td class="fw-bold text-primary">{{ req.trackingNumber }}</td>
+                        <td>{{ req.assignedCrew || 'Sin asignar' }}</td>
+                        <td class="small text-truncate" style="max-width: 180px;">{{ req.address }}</td>
+                        <td><span class="badge" [ngClass]="getStatusBadge(req.status)">{{ req.status }}</span></td>
+                      </tr>
+                      <tr *ngIf="terrainQueue.length === 0">
+                        <td colspan="4" class="text-center text-muted py-3">
+                          No hay cuadrillas asignadas en terreno actualmente.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-lg-6">
-          <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
-              <span><i class="bi bi-truck text-primary me-2"></i>Cuadrillas en Terreno Activas</span>
-              <span class="badge bg-primary">{{ terrainQueue.length }} en ruta</span>
+        <!-- Tabla de Trámites Resueltos / Terminados -->
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-check-circle-fill text-success me-2"></i>Trámites Resueltos / Finalizados</span>
+            <span class="badge bg-success">{{ resolvedQueue.length }} completados</span>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light small">
+                  <tr>
+                    <th>Código</th>
+                    <th>Trámite</th>
+                    <th>Vecino</th>
+                    <th>Cuadrilla / Resolución</th>
+                    <th>Estado</th>
+                    <th>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let req of resolvedQueue">
+                    <td class="fw-bold text-primary">{{ req.trackingNumber }}</td>
+                    <td>{{ req.procedureName }}</td>
+                    <td>{{ req.citizenName }}</td>
+                    <td class="small text-muted">
+                      <span *ngIf="req.assignedCrew"><i class="bi bi-truck me-1"></i>{{ req.assignedCrew }}</span>
+                      <span *ngIf="req.resolutionNotes" class="d-block text-truncate" style="max-width: 250px;">{{ req.resolutionNotes }}</span>
+                    </td>
+                    <td>
+                      <span class="badge bg-success">RESUELTO</span>
+                    </td>
+                    <td class="small text-muted">{{ req.updatedAt || req.createdAt | date:'short' }}</td>
+                  </tr>
+                  <tr *ngIf="resolvedQueue.length === 0">
+                    <td colspan="6" class="text-center text-muted py-3">
+                      Aún no hay trámites con estado RESUELTO.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                  <thead class="table-light small">
-                    <tr>
-                      <th>Código</th>
-                      <th>Cuadrilla</th>
-                      <th>Dirección</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr *ngFor="let req of terrainQueue">
-                      <td class="fw-bold">{{ req.trackingNumber }}</td>
-                      <td>{{ req.assignedCrew || 'Sin asignar' }}</td>
-                      <td class="small">{{ req.address }}</td>
-                      <td><span class="badge bg-info text-dark">EN_TERRENO</span></td>
-                    </tr>
-                    <tr *ngIf="terrainQueue.length === 0">
-                      <td colspan="4" class="text-center text-muted py-3">
-                        No hay cuadrillas asignadas en terreno actualmente.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+          </div>
+        </div>
+
+        <!-- Panel de Auditoría y Trazabilidad en Vivo (Visible para Auditor y Admin) -->
+        <div *ngIf="currentUser.role === 'Auditor' || currentUser.role === 'Admin'" class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-shield-check text-warning me-2"></i>Eventos de Auditoría Recientes (Trazabilidad en Vivo)</span>
+            <a routerLink="/audit" class="btn btn-sm btn-outline-warning text-dark">
+              <i class="bi bi-arrow-right-circle me-1"></i> Ver Todo el Registro
+            </a>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light small">
+                  <tr>
+                    <th>Fecha / Hora</th>
+                    <th>N° Seguimiento</th>
+                    <th>Acción</th>
+                    <th>Transición de Estado</th>
+                    <th>Operador</th>
+                    <th>Rol</th>
+                    <th>Comentarios</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let log of auditLogs">
+                    <td class="small text-muted text-nowrap">{{ log.timestamp | date:'short' }}</td>
+                    <td class="fw-bold text-primary">{{ log.trackingNumber }}</td>
+                    <td><span class="badge bg-secondary small">{{ log.action }}</span></td>
+                    <td>
+                      <span *ngIf="log.previousStatus" class="small text-muted">{{ log.previousStatus }} &rarr; </span>
+                      <span class="badge bg-primary small">{{ log.newStatus }}</span>
+                    </td>
+                    <td class="fw-semibold">{{ log.performedBy }}</td>
+                    <td><span class="badge bg-light text-dark border">{{ log.userRole }}</span></td>
+                    <td class="small text-muted text-truncate" style="max-width: 260px;">{{ log.comments || '-' }}</td>
+                  </tr>
+                  <tr *ngIf="auditLogs.length === 0">
+                    <td colspan="7" class="text-center text-muted py-3">
+                      No hay eventos de auditoría registrados aún.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -269,10 +365,12 @@ import { ProcedureType } from '../../core/models/procedure.model';
 export class DashboardComponent implements OnInit {
   private authService = inject(AuthService);
   private apiService = inject(ApiService);
+  private cdr = inject(ChangeDetectorRef);
 
   currentUser: UserProfile | null = null;
   requests: RequestItem[] = [];
   kpis: KpisResponse | null = null;
+  auditLogs: AuditLog[] = [];
 
   statusKeys = ['INGRESADO', 'ADMITIDO', 'EN_GESTION', 'EN_TERRENO', 'RESUELTO', 'RECHAZADO'];
 
@@ -283,14 +381,30 @@ export class DashboardComponent implements OnInit {
 
   loadData(): void {
     this.apiService.getRequests().subscribe({
-      next: (data) => (this.requests = data),
+      next: (data) => {
+        this.requests = data;
+        this.cdr.detectChanges();
+      },
       error: (err) => console.error('Error cargando trámites:', err)
     });
 
     this.apiService.getKpis().subscribe({
-      next: (data) => (this.kpis = data),
+      next: (data) => {
+        this.kpis = data;
+        this.cdr.detectChanges();
+      },
       error: (err) => console.error('Error cargando KPIs:', err)
     });
+
+    if (this.currentUser?.role === 'Auditor' || this.currentUser?.role === 'Admin') {
+      this.apiService.getAuditTimeline().subscribe({
+        next: (logs) => {
+          this.auditLogs = logs.slice(0, 6);
+          this.cdr.detectChanges();
+        },
+        error: (err) => console.error('Error cargando auditoría en dashboard:', err)
+      });
+    }
   }
 
   get admissionQueue(): RequestItem[] {
@@ -299,6 +413,10 @@ export class DashboardComponent implements OnInit {
 
   get terrainQueue(): RequestItem[] {
     return this.requests.filter((r) => r.status === 'EN_TERRENO' || r.status === 'EN_GESTION');
+  }
+
+  get resolvedQueue(): RequestItem[] {
+    return this.requests.filter((r) => r.status === 'RESUELTO');
   }
 
   countActive(): number {

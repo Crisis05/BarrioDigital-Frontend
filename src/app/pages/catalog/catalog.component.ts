@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
@@ -31,7 +31,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
       <!-- Alertas -->
       <div *ngIf="alertMessage" class="alert alert-dismissible fade show" [ngClass]="alertClass" role="alert">
         <i class="bi me-2" [ngClass]="alertIcon"></i>{{ alertMessage }}
-        <button type="button" class="btn-close" (click)="alertMessage = ''"></button>
+        <button type="button" class="btn-close" (click)="closeAlert()"></button>
       </div>
 
       <!-- Tarjetas de Tipos de Trámite -->
@@ -76,10 +76,16 @@ import { ProcedureType } from '../../core/models/procedure.model';
 
             <div class="card-footer bg-white border-top py-2 d-flex justify-content-between align-items-center" *ngIf="currentUser?.role === 'Admin'">
               <span class="small text-muted">Configuración</span>
-              <button class="btn btn-sm btn-outline-secondary" (click)="openEditModal(proc)">
-                <i class="bi bi-gear me-1"></i> Editar Cupo
-              </button>
+              <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-outline-secondary" (click)="openEditModal(proc)" title="Editar Cupo">
+                  <i class="bi bi-gear me-1"></i> Editar
+                </button>
+                <button class="btn btn-sm btn-outline-danger" (click)="deleteProcedure(proc)" title="Eliminar Trámite">
+                  <i class="bi bi-trash me-1"></i> Eliminar
+                </button>
+              </div>
             </div>
+
           </div>
         </div>
       </div>
@@ -92,14 +98,44 @@ import { ProcedureType } from '../../core/models/procedure.model';
               <h5 class="modal-title fw-bold">
                 {{ isEditing ? 'Editar Cupos y Requisitos' : 'Registrar Nuevo Tipo de Trámite' }}
               </h5>
-              <button type="button" class="btn-close btn-close-white" (click)="showModal = false"></button>
+              <button type="button" class="btn-close btn-close-white" (click)="closeModal()"></button>
             </div>
             <div class="modal-body p-4">
               <form (ngSubmit)="saveProcedure()">
                 <div class="mb-3" *ngIf="!isEditing">
-                  <label class="form-label fw-semibold">Código *</label>
-                  <input type="text" class="form-control" [(ngModel)]="currentProcedure.code" name="code" placeholder="Ej: SEG-05" required />
+                  <label class="form-label fw-semibold">
+                    <i class="bi bi-tag-fill text-primary me-1"></i>Tipo / Categoría de Trámite *
+                  </label>
+                  <select class="form-select" [(ngModel)]="selectedCategory" (change)="onCategoryChange()" name="selectedCategory" required>
+                    <option value="" disabled selected>-- Selecciona el tipo de servicio comunal --</option>
+                    <option value="LUM">💡 Luminaria Pública (LUM)</option>
+                    <option value="ESC">🚛 Retiro de Escombros / Voluminosos (ESC)</option>
+                    <option value="PAV">🚧 Bacheo y Pavimentación (PAV)</option>
+                    <option value="POD">🌳 Poda de Árboles en Vía Pública (POD)</option>
+                    <option value="OTR">📋 Otro servicio comunal</option>
+                  </select>
                 </div>
+
+                <div class="mb-3" *ngIf="!isEditing">
+                  <label class="form-label fw-semibold">Código del Trámite *</label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-light fw-bold text-primary">
+                      <i class="bi bi-upc-scan me-1"></i>
+                    </span>
+                    <input
+                      type="text"
+                      class="form-control fw-bold"
+                      [(ngModel)]="currentProcedure.code"
+                      name="code"
+                      placeholder="Selecciona categoría para autogenerar código"
+                      required
+                    />
+                  </div>
+                  <div class="form-text text-success small" *ngIf="currentProcedure.code">
+                    <i class="bi bi-check-circle me-1"></i>Código autogenerado según correlativo: <strong>{{ currentProcedure.code }}</strong>
+                  </div>
+                </div>
+
                 <div class="mb-3">
                   <label class="form-label fw-semibold">Nombre del Trámite *</label>
                   <input type="text" class="form-control" [(ngModel)]="currentProcedure.name" name="name" placeholder="Ej: Mantención de Semáforos" required />
@@ -128,7 +164,7 @@ import { ProcedureType } from '../../core/models/procedure.model';
                 </div>
 
                 <div class="mt-4 text-end">
-                  <button type="button" class="btn btn-secondary me-2" (click)="showModal = false">Cancelar</button>
+                  <button type="button" class="btn btn-secondary me-2" (click)="closeModal()">Cancelar</button>
                   <button type="submit" class="btn btn-primary px-4">Guardar</button>
                 </div>
               </form>
@@ -145,12 +181,14 @@ import { ProcedureType } from '../../core/models/procedure.model';
 export class CatalogComponent implements OnInit {
   private apiService = inject(ApiService);
   private authService = inject(AuthService);
+  private cdr = inject(ChangeDetectorRef);
 
   currentUser: UserProfile | null = null;
   procedures: ProcedureType[] = [];
 
   showModal = false;
   isEditing = false;
+  selectedCategory = '';
   currentProcedure: Partial<ProcedureType> = {};
 
   alertMessage = '';
@@ -164,13 +202,20 @@ export class CatalogComponent implements OnInit {
 
   loadProcedures(): void {
     this.apiService.getProcedures().subscribe({
-      next: (data) => (this.procedures = data),
-      error: (err) => this.showAlert('Error cargando catálogo comunal.', 'alert-danger')
+      next: (data) => {
+        this.procedures = data;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.showAlert('Error cargando catálogo comunal.', 'alert-danger');
+        this.cdr.detectChanges();
+      }
     });
   }
 
   openCreateModal(): void {
     this.isEditing = false;
+    this.selectedCategory = '';
     this.currentProcedure = {
       code: '',
       name: '',
@@ -182,12 +227,59 @@ export class CatalogComponent implements OnInit {
       active: true
     };
     this.showModal = true;
+    this.cdr.detectChanges();
   }
+
+  onCategoryChange(): void {
+    if (!this.selectedCategory) return;
+
+    const categoryMap: { [key: string]: { prefix: string; department: string } } = {
+      LUM: { prefix: 'LUM', department: 'Alumbrado Público' },
+      ESC: { prefix: 'ESC', department: 'Medio Ambiente' },
+      PAV: { prefix: 'PAV', department: 'Obras Comunales' },
+      POD: { prefix: 'POD', department: 'Aseo y Ornato' },
+      OTR: { prefix: 'COM', department: 'Atención Vecinal' }
+    };
+
+    const config = categoryMap[this.selectedCategory];
+    if (config) {
+      this.currentProcedure.code = this.calculateNextCode(config.prefix);
+      this.currentProcedure.department = config.department;
+      this.cdr.detectChanges();
+    }
+  }
+
+  calculateNextCode(prefix: string): string {
+    // 1. Contar cuántos trámites ya existen creados con este prefijo/tipo
+    const matching = this.procedures.filter(p =>
+      p.code && p.code.toUpperCase().startsWith(prefix.toUpperCase())
+    );
+
+    // Número siguiente según la cantidad ya creada para este tipo
+    let nextNum = matching.length + 1;
+    let candidate = `${prefix}-${String(nextNum).padStart(2, '0')}`;
+
+    // Si por algún motivo ya existe este código en el catálogo, buscar el siguiente correlativo disponible
+    while (this.procedures.some(p => p.code?.toUpperCase() === candidate.toUpperCase())) {
+      nextNum++;
+      candidate = `${prefix}-${String(nextNum).padStart(2, '0')}`;
+    }
+
+    return candidate;
+  }
+
 
   openEditModal(proc: ProcedureType): void {
     this.isEditing = true;
     this.currentProcedure = { ...proc };
     this.showModal = true;
+    this.cdr.detectChanges();
+  }
+
+  closeModal(): void {
+    this.showModal = false;
+    this.currentProcedure = {};
+    this.cdr.detectChanges();
   }
 
   saveProcedure(): void {
@@ -198,7 +290,10 @@ export class CatalogComponent implements OnInit {
           this.showAlert('Trámite actualizado correctamente.', 'alert-success');
           this.loadProcedures();
         },
-        error: (err) => this.showAlert('Error al actualizar: ' + err.message, 'alert-danger')
+        error: (err) => {
+          this.showAlert('Error al actualizar: ' + err.message, 'alert-danger');
+          this.cdr.detectChanges();
+        }
       });
     } else {
       this.apiService.createProcedure(this.currentProcedure as ProcedureType).subscribe({
@@ -207,12 +302,33 @@ export class CatalogComponent implements OnInit {
           this.showAlert('Nuevo tipo de trámite añadido al catálogo.', 'alert-success');
           this.loadProcedures();
         },
-        error: (err) => this.showAlert('Error al crear trámite: ' + err.message, 'alert-danger')
+        error: (err) => {
+          this.showAlert('Error al crear trámite: ' + err.message, 'alert-danger');
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  deleteProcedure(proc: ProcedureType): void {
+    if (!proc.id) return;
+    const confirmDelete = confirm(`¿Estás seguro de que deseas eliminar "${proc.name}" (${proc.code}) del catálogo comunal?`);
+    if (confirmDelete) {
+      this.apiService.deleteProcedure(proc.id).subscribe({
+        next: () => {
+          this.showAlert(`Trámite "${proc.name}" (${proc.code}) eliminado exitosamente.`, 'alert-success');
+          this.loadProcedures();
+        },
+        error: (err) => {
+          this.showAlert('Error al eliminar trámite: ' + (err.error?.message || err.message), 'alert-danger');
+          this.cdr.detectChanges();
+        }
       });
     }
   }
 
   getQuotaProgressClass(available: number, total: number): string {
+
     const ratio = available / total;
     if (ratio > 0.5) return 'bg-success';
     if (ratio > 0.2) return 'bg-warning';
@@ -223,5 +339,11 @@ export class CatalogComponent implements OnInit {
     this.alertMessage = message;
     this.alertClass = cssClass;
     this.alertIcon = cssClass.includes('success') ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill';
+    this.cdr.detectChanges();
+  }
+
+  closeAlert(): void {
+    this.alertMessage = '';
+    this.cdr.detectChanges();
   }
 }
